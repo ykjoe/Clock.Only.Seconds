@@ -1,0 +1,2 @@
+MainPackage=C:\Users\YkJoe\Workspace\widbar-widget-template\Clock.Only.Seconds\Clock.Only.Seconds (Package)\bin\arm64\Release\Clock.Only.Seconds (Package)_1.0.0.0_arm64.msix
+SymbolPackage=C:\Users\YkJoe\Workspace\widbar-widget-template\Clock.Only.Seconds\Clock.Only.Seconds (Package)\obj\arm64\Release\Symbols\Clock.Only.Seconds (Package)_1.0.0.0_arm64.appxsym
