@@ -1,8 +1,8 @@
-using System.Text.Json;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using System.Text.Json;
 using WidBar.SDK;
 
 namespace Clock.Only.Seconds.ExtensionApp;
@@ -23,13 +23,17 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin
 
     public override int PreviewLogicalWidth => 150;
     public override int FlyoutWidth => 360;
-    public override int FlyoutHeight => 240;
+    public override int FlyoutHeight => 680;
     public override WidgetFlyoutBackdrop FlyoutBackdrop => WidgetFlyoutBackdrop.Acrylic;
+
 
     private sealed class Settings
     {
+        // # Settings Option
+        public TimeDisp.TimeDisplayMode DispMode { get; set; } = TimeDisp.TimeDisplayMode.OnlySeconds;
         public bool Use24h { get; set; } = true;
 
+        // # Saving & Restore
         public static Settings FromJson(string? json)
         {
             try
@@ -47,11 +51,16 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin
         public string ToJson() => JsonSerializer.Serialize(this);
     }
 
-    private string TimeText => DateTime.Now.ToString(_settings.Use24h ? "HH:mm:ss" : "hh:mm:ss tt");
+    private string TimeText => TimeDisp.DispTimeNow(_settings.DispMode, _settings.Use24h);
+    private TaskManager _taskManager = new();
 
     public override Task InitializeAsync(IWidgetContext context)
     {
         _settings = Settings.FromJson(context.SettingsJson);
+
+        // Initialization
+        _taskManager.Load(context);
+
         base.InitializeAsync(context);
 
         // Ask WidBar to refresh the taskbar preview once a second.
@@ -70,7 +79,7 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin
             Text = TimeText,
             FontSize = 16,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Colors.White),
+            Foreground = new SolidColorBrush(Colors.MediumPurple),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -91,30 +100,42 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin
     // so anything goes: scrolling, input, Win2D, whatever you need.
     public override UIElement? CreateFlyoutContent()
     {
+        // elements
         var clock = new TextBlock
         {
             Text = TimeText,
-            FontSize = 40,
+            FontSize = 36,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
 
+        var taskContainer = new StackPanel {
+            Margin = new Thickness(0, 0, 0, 0),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10)
+        };
+        if (Context != null)
+        {
+            taskContainer.Children.Add(_taskManager.BuildTaskUIList(_settings.DispMode, Context));
+        }
+
+        // timer update
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        timer.Tick += (_, _) => clock.Text = TimeText;
+        timer.Tick += (_, _) =>
+        {
+            clock.Text = TimeText;
+            _taskManager.UpdateTaskUI(_settings.DispMode);
+        };
         timer.Start();
 
+        // pannel display
         var panel = new StackPanel
         {
             Spacing = 12,
-            Padding = new Thickness(24),
-            VerticalAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(12),
+            VerticalAlignment = VerticalAlignment.Top,
         };
         panel.Children.Add(clock);
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Clock Only Seconds",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Opacity = 0.6,
-        });
+        panel.Children.Add(taskContainer);
 
         return panel;
     }
@@ -124,7 +145,22 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin
     // SaveSettings on every change so the draft stays current.
     public UIElement? CreateSettingsContent(IWidgetSettingsContext context)
     {
+        // # Define saving json
         var draft = Settings.FromJson(context.SettingsJson);
+
+        // # content in settings interface
+        var modeSelector = new ComboBox
+        {
+            Header = "Display Mode",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Items = { "Only Seconds", "Local General", "UTC General" },
+            SelectedIndex = (int)draft.DispMode
+        };
+        modeSelector.SelectionChanged += (_, _) =>
+        {
+            draft.DispMode = (TimeDisp.TimeDisplayMode)modeSelector.SelectedIndex;
+            context.SaveSettings(draft.ToJson());
+        };
 
         var toggle = new ToggleSwitch
         {
@@ -137,8 +173,10 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin
             context.SaveSettings(draft.ToJson());
         };
 
+        // # register all the content
         var panel = new StackPanel { Spacing = 16 };
         panel.Children.Add(toggle);
+        panel.Children.Add(modeSelector);
         return panel;
     }
 
