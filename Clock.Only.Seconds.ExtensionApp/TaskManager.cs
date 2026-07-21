@@ -20,7 +20,7 @@ public class TaskManager
     {
     }
 
-    // task definition
+    // ==================== Task Definition ====================
     public class myTask
     {
         public string Name { get; set; }
@@ -38,34 +38,35 @@ public class TaskManager
 
         public myTask(string name, string description, DateTime deadline, DateTime forgot_time)
         {
-            this.Name = name;
-            this.Description = description;
-            this.Deadline = deadline;
-            this.ForgotTime = forgot_time;
+            Name = name;
+            Description = description;
+            Deadline = deadline;
+            ForgotTime = forgot_time;
             CreatTime = DateTime.Now;
         }
 
         public myTask(string name, string description, DateTime deadline, TimeSpan life_duration)
         {
-            this.Name = name;
-            this.Description = description;
-            this.Deadline = deadline;
-            this.ForgotTime = deadline + life_duration;
+            Name = name;
+            Description = description;
+            Deadline = deadline;
+            ForgotTime = deadline + life_duration;
             CreatTime = DateTime.Now;
         }
 
         public myTask(string name, string description, DateTime deadline)
         {
-            this.Name = name;
-            this.Description = description;
-            this.Deadline = deadline;
-            this.ForgotTime = deadline + TimeSpan.FromDays(7);
+            Name = name;
+            Description = description;
+            Deadline = deadline;
+            ForgotTime = deadline + TimeSpan.FromDays(7);
             CreatTime = DateTime.Now;
         }
     }
 
-    // manager
+    // ==================== Task Management ====================
     private readonly List<myTask> _tasks = new List<myTask>();
+
     private List<myTask> GetAllTasks() => _tasks;
     private void AddTask(myTask task) => _tasks.Add(task);
     private void RemoveTask(string name) => _tasks.RemoveAll(t => t.Name == name);
@@ -85,8 +86,9 @@ public class TaskManager
             var list = JsonSerializer.Deserialize<List<myTask>>(json) ?? new List<myTask>();
             _tasks.AddRange(list);
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"Failed to deserialize json: {ex.Message}");
         }
     }
 
@@ -96,11 +98,11 @@ public class TaskManager
         {
             string filePath = Path.Combine(context.DataDirectory, "tasks.json");
             Directory.CreateDirectory(context.DataDirectory);
-            File.WriteAllText(filePath, this.ToJson());
+            File.WriteAllText(filePath, ToJson());
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to save tasks: {ex.Message}");
+            Debug.WriteLine($"Failed to save tasks: {ex.Message}");
         }
     }
 
@@ -112,20 +114,19 @@ public class TaskManager
         try
         {
             string json = File.ReadAllText(filePath);
-            this.LoadFromJson(json);
+            LoadFromJson(json);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to load tasks: {ex.Message}");
+            Debug.WriteLine($"Failed to load tasks: {ex.Message}");
         }
     }
 
-    // display
+    // ==================== Helpers & Calculation ====================
     private static string TaskScheduleTextShow(myTask task, TimeDisp.TimeDisplayMode mode)
     {
         TimeSpan timespan = task.Deadline - DateTime.Now;
-        string schedule = TimeDisp.DispTimeSpan(timespan, mode);
-        return schedule;
+        return TimeDisp.DispTimeSpan(timespan, mode);
     }
 
     private static (double progress, bool isOverdue) GetTaskProgress(myTask task)
@@ -157,6 +158,7 @@ public class TaskManager
         }
     }
 
+    // ==================== UI State & Rendering ====================
     private StackPanel? _listContainer;
     private readonly List<myTask> _selectedTasks = new();
     private readonly Dictionary<myTask, (TextBlock LeftTextControl, TextBlock RightTextControl, ProgressBar ProgressControl)> _uiReferences = new();
@@ -172,25 +174,24 @@ public class TaskManager
     {
         if (_listContainer == null)
         {
-            _listContainer = new StackPanel { Spacing = 8 };
+            _listContainer = new StackPanel { Spacing = 6, Padding = new Thickness(0) };
         }
 
         _listContainer.Children.Clear();
         _uiReferences.Clear();
         _selectedTasks.Clear();
 
-        // --- 1. 顶部工具栏布局（Sort、Add、Edit、Delete 并排） ---
-        var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+        // --- 1. 顶部工具栏布局（Sort、Add、Delete） ---
+        var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch };
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         string sortBtnText = _currentSortMode == TaskSortMode.ByCreateTime ? "🕒" : "⏳";
         var sortBtn = new Button
         {
             Content = sortBtnText,
-            Margin = new Thickness(0, 0, 2, 0)
+            Margin = new Thickness(0, 0, 4, 0)
         };
         sortBtn.Click += (s, e) =>
         {
@@ -207,8 +208,10 @@ public class TaskManager
             Content = "+ Add new task",
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        addButton.Click += async (s, e) => {
-            await ShowTaskDialog(_listContainer.XamlRoot, null, mode, () => {
+        addButton.Click += async (s, e) =>
+        {
+            await ShowTaskDialog(_listContainer.XamlRoot, null, mode, () =>
+            {
                 Save(context);
                 BuildTaskUIList(mode, context);
             });
@@ -216,29 +219,11 @@ public class TaskManager
         Grid.SetColumn(addButton, 1);
         headerGrid.Children.Add(addButton);
 
-        var editBtn = new Button
-        {
-            Content = "Edit",
-            Margin = new Thickness(2, 0, 0, 0),
-            IsEnabled = false
-        };
-        editBtn.Click += async (s, e) =>
-        {
-            if (_selectedTasks.Count != 1) return;
-            var taskToEdit = _selectedTasks[0];
-            await ShowTaskDialog(_listContainer.XamlRoot, taskToEdit, mode, () => {
-                Save(context);
-                BuildTaskUIList(mode, context);
-            });
-        };
-        Grid.SetColumn(editBtn, 2);
-        headerGrid.Children.Add(editBtn);
-
         var deleteBtn = new Button
         {
             Content = "Delete",
             Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red),
-            Margin = new Thickness(2, 0, 0, 0),
+            Margin = new Thickness(4, 0, 0, 0),
             IsEnabled = false
         };
         deleteBtn.Click += async (s, e) =>
@@ -250,7 +235,7 @@ public class TaskManager
             var confirmDialog = new ContentDialog
             {
                 Title = "Confirm Delete",
-                Content = "Are you sure you want to delete the selected task(s)?",
+                Content = $"Are you sure you want to delete {_selectedTasks.Count} selected task(s)?",
                 PrimaryButtonText = "Delete",
                 CloseButtonText = "Cancel",
                 XamlRoot = currentRoot
@@ -272,10 +257,10 @@ public class TaskManager
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Dialog crash prevented: {ex.Message}");
+                Debug.WriteLine($"Dialog crash prevented: {ex.Message}");
             }
         };
-        Grid.SetColumn(deleteBtn, 3);
+        Grid.SetColumn(deleteBtn, 2);
         headerGrid.Children.Add(deleteBtn);
         _listContainer.Children.Add(headerGrid);
 
@@ -294,11 +279,44 @@ public class TaskManager
             return _listContainer;
         }
 
-        // --- 2. 静态页面骨架及选择器构建 ---
-        var taskRowsStack = new StackPanel { Spacing = 0 };
+        // --- 2. 静态页面骨架及列表构建 ---
+        var taskRowsStack = new StackPanel
+        {
+            Spacing = 2,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        Border? _currentExpandedDescBorder = null;
+        Border? _currentExpandedTaskItemBorder = null;
+
+        // 颜色调配色板：调高高亮对比度
+        var normalBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));             // 平时透明
+        var hoverBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(50, 255, 255, 255));        // 悬停高亮
+        var activeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(70, 0, 120, 215));         // 展开高亮
+
         foreach (var task in tasks)
         {
-            var gridRow = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+            // 将外边距Margin减小到 0，缩减卡片Padding，极大化横向可用空间
+            var taskItemBorder = new Border
+            {
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(2, 4, 2, 4), // 左右内边距压缩到 2px
+                Margin = new Thickness(0, 1, 0, 1),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Background = normalBrush
+            };
+
+            var taskItemContainer = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 4,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+            };
+
+            var gridRow = new Grid
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
             gridRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             gridRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -308,9 +326,11 @@ public class TaskManager
 
             var leftText = new TextBlock
             {
+                Text = task.Name,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 FontSize = 15,
-                Opacity = 0.6
+                Opacity = 0.9,
+                FontWeight = Microsoft.UI.Text.FontWeights.Medium
             };
             Grid.SetColumn(leftText, 0);
             textHeaderGrid.Children.Add(leftText);
@@ -319,17 +339,18 @@ public class TaskManager
             {
                 HorizontalAlignment = HorizontalAlignment.Right,
                 FontSize = 15,
-                Opacity = 0.6
+                Opacity = 0.7
             };
             Grid.SetColumn(rightText, 1);
             textHeaderGrid.Children.Add(rightText);
 
-            var taskContentStack = new StackPanel { Orientation = Orientation.Vertical, Spacing = 2 };
+            var taskContentStack = new StackPanel { Orientation = Orientation.Vertical, Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch };
 
             var progressBar = new ProgressBar
             {
                 Height = 3,
-                FlowDirection = FlowDirection.RightToLeft
+                FlowDirection = FlowDirection.RightToLeft,
+                HorizontalAlignment = HorizontalAlignment.Stretch
             };
 
             taskContentStack.Children.Add(textHeaderGrid);
@@ -338,28 +359,133 @@ public class TaskManager
             Grid.SetColumn(taskContentStack, 0);
             gridRow.Children.Add(taskContentStack);
 
+            // 复选框：压缩与左边的 Margin
             var selectCheck = new CheckBox
             {
                 MinWidth = 0,
-                Margin = new Thickness(8, 0, 0, 0),
+                Margin = new Thickness(4, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            selectCheck.Checked += (s, e) => {
+            selectCheck.Checked += (s, e) =>
+            {
                 _selectedTasks.Add(task);
                 deleteBtn.IsEnabled = _selectedTasks.Count > 0;
-                editBtn.IsEnabled = _selectedTasks.Count == 1;
             };
-            selectCheck.Unchecked += (s, e) => {
+            selectCheck.Unchecked += (s, e) =>
+            {
                 _selectedTasks.Remove(task);
                 deleteBtn.IsEnabled = _selectedTasks.Count > 0;
-                editBtn.IsEnabled = _selectedTasks.Count == 1;
             };
+
+            selectCheck.PointerPressed += (s, e) => e.Handled = true;
+            selectCheck.PointerReleased += (s, e) => e.Handled = true;
 
             Grid.SetColumn(selectCheck, 1);
             gridRow.Children.Add(selectCheck);
 
-            taskRowsStack.Children.Add(gridRow);
+            // Description 展开区域
+            var descContainer = new Border
+            {
+                Visibility = Visibility.Collapsed,
+                Margin = new Thickness(0, 2, 0, 2),
+                Padding = new Thickness(8, 6, 6, 6),
+                CornerRadius = new CornerRadius(4),
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(25, 255, 255, 255)),
+                BorderThickness = new Thickness(2, 0, 0, 0),
+                BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            var descGrid = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+            descGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            descGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var descText = new TextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(task.Description) ? "No description provided." : task.Description,
+                FontSize = 13,
+                Opacity = 0.8,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(descText, 0);
+            descGrid.Children.Add(descText);
+
+            var itemEditBtn = new Button
+            {
+                Content = "Edit",
+                FontSize = 12,
+                Margin = new Thickness(6, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            itemEditBtn.Click += async (s, e) =>
+            {
+                await ShowTaskDialog(_listContainer.XamlRoot, task, mode, () =>
+                {
+                    Save(context);
+                    BuildTaskUIList(mode, context);
+                });
+            };
+            itemEditBtn.PointerPressed += (s, e) => e.Handled = true;
+            Grid.SetColumn(itemEditBtn, 1);
+            descGrid.Children.Add(itemEditBtn);
+
+            descContainer.Child = descGrid;
+
+            taskItemContainer.Children.Add(gridRow);
+            taskItemContainer.Children.Add(descContainer);
+            taskItemBorder.Child = taskItemContainer;
+
+            // ==================== 鼠标移动与悬停高亮逻辑 ====================
+            taskItemBorder.PointerEntered += (s, e) =>
+            {
+                if (_currentExpandedTaskItemBorder != taskItemBorder)
+                {
+                    taskItemBorder.Background = hoverBrush;
+                }
+            };
+
+            taskItemBorder.PointerExited += (s, e) =>
+            {
+                if (_currentExpandedTaskItemBorder != taskItemBorder)
+                {
+                    taskItemBorder.Background = normalBrush;
+                }
+            };
+
+            taskItemBorder.PointerPressed += (s, e) =>
+            {
+                bool isCurrentAlreadyExpanded = descContainer.Visibility == Visibility.Visible;
+
+                if (_currentExpandedDescBorder != null && _currentExpandedDescBorder != descContainer)
+                {
+                    _currentExpandedDescBorder.Visibility = Visibility.Collapsed;
+                    if (_currentExpandedTaskItemBorder != null)
+                    {
+                        _currentExpandedTaskItemBorder.Background = normalBrush;
+                    }
+                }
+
+                if (isCurrentAlreadyExpanded)
+                {
+                    descContainer.Visibility = Visibility.Collapsed;
+                    taskItemBorder.Background = hoverBrush;
+                    _currentExpandedDescBorder = null;
+                    _currentExpandedTaskItemBorder = null;
+                }
+                else
+                {
+                    descContainer.Visibility = Visibility.Visible;
+                    taskItemBorder.Background = activeBrush;
+                    _currentExpandedDescBorder = descContainer;
+                    _currentExpandedTaskItemBorder = taskItemBorder;
+                }
+
+                e.Handled = true;
+            };
+
+            taskRowsStack.Children.Add(taskItemBorder);
             _uiReferences[task] = (leftText, rightText, progressBar);
         }
 
@@ -368,6 +494,7 @@ public class TaskManager
             Height = 500,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Content = taskRowsStack
         };
         _listContainer.Children.Add(listScrollViewer);
@@ -415,52 +542,65 @@ public class TaskManager
                 progressBar.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Blue);
                 if (progress >= 1.0) progressBar.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray);
             }
-        }/* END foreach (var kp in _uiReferences) */
+        }
     }
 
+    // ==================== Dialogs ====================
     private async Task<bool> ShowTaskDialog(XamlRoot xamlRoot, myTask? taskToEdit, TimeDisp.TimeDisplayMode mode, Action onSaveSuccess)
     {
         bool isEditMode = taskToEdit != null;
 
-        var formContainer = new StackPanel { Spacing = 3, Width = 300 };
+        var formContainer = new StackPanel { Spacing = 8, Width = 480 };
 
-        var nameInput = new TextBox { Header = "Task Name* ", PlaceholderText = "Enter task name...", Text = isEditMode ? taskToEdit!.Name : "" };
+        var nameInput = new TextBox { Header = "Task Name*", PlaceholderText = "Enter task name...", Text = isEditMode ? taskToEdit!.Name : "" };
         formContainer.Children.Add(nameInput);
 
-        var descInput = new TextBox { Header = "Description* ", PlaceholderText = "Enter description...", Text = isEditMode ? taskToEdit!.Description : "" };
+        var descInput = new TextBox { Header = "Description*", PlaceholderText = "Enter description...", Text = isEditMode ? taskToEdit!.Description : "" };
         formContainer.Children.Add(descInput);
 
-        var deadlineHeaderStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        deadlineHeaderStack.Children.Add(new TextBlock { Text = "Deadline* ", VerticalAlignment = VerticalAlignment.Center });
-        var deadlineSecCheck = new CheckBox { Content = "After any Seconds", VerticalAlignment = VerticalAlignment.Center };
+        // ================= Deadline 部分 =================
+        var deadlineHeaderStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, Margin = new Thickness(0, 4, 0, 0) };
+        deadlineHeaderStack.Children.Add(new TextBlock { Text = "Deadline*", VerticalAlignment = VerticalAlignment.Center, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        var deadlineSecCheck = new CheckBox { Content = "After any Seconds", VerticalAlignment = VerticalAlignment.Center};
         deadlineHeaderStack.Children.Add(deadlineSecCheck);
         formContainer.Children.Add(deadlineHeaderStack);
+
         var deadlineSecInput = new NumberBox { PlaceholderText = "Enter duration in seconds...", Visibility = Visibility.Collapsed };
-        var deadlineNormalInput = new Grid { Visibility = Visibility.Visible };
-        deadlineNormalInput.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        deadlineNormalInput.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var deadlineDatePicker = new DatePicker { HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 4, 0) };
+
+        // 2. 将 Grid 改为 StackPanel 垂直排列，让 DatePicker 和 TimePicker 各自独占一行
+        var deadlineNormalInput = new StackPanel { Spacing = 0, Visibility = Visibility.Visible };
+
+        var deadlineDatePicker = new DatePicker { HorizontalAlignment = HorizontalAlignment.Stretch };
         var deadlineTimePicker = new TimePicker { HorizontalAlignment = HorizontalAlignment.Stretch, ClockIdentifier = "24HourClock" };
-        Grid.SetColumn(deadlineDatePicker, 0);
-        Grid.SetColumn(deadlineTimePicker, 1);
+
+        // 3. 允许下拉弹出层超出宿主窗口边界
+        if (deadlineDatePicker.ContextFlyout != null) deadlineDatePicker.ContextFlyout.ShouldConstrainToRootBounds = false;
+        if (deadlineTimePicker.ContextFlyout != null) deadlineTimePicker.ContextFlyout.ShouldConstrainToRootBounds = false;
+
         deadlineNormalInput.Children.Add(deadlineDatePicker);
         deadlineNormalInput.Children.Add(deadlineTimePicker);
+
         formContainer.Children.Add(deadlineSecInput);
         formContainer.Children.Add(deadlineNormalInput);
 
-        var forgotHeaderStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 8, 0, 0) };
-        forgotHeaderStack.Children.Add(new TextBlock { Text = "Forgot Time ", VerticalAlignment = VerticalAlignment.Center });
-        var forgotSecCheck = new CheckBox { Content = "After any Seconds", VerticalAlignment = VerticalAlignment.Center };
+        // ================= Forgot Time 部分 =================
+        var forgotHeaderStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, Margin = new Thickness(0, 4, 0, 0) };
+        forgotHeaderStack.Children.Add(new TextBlock { Text = "Forgot Time", VerticalAlignment = VerticalAlignment.Center, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        var forgotSecCheck = new CheckBox { Content = "After any Seconds", VerticalAlignment = VerticalAlignment.Center};
         forgotHeaderStack.Children.Add(forgotSecCheck);
         formContainer.Children.Add(forgotHeaderStack);
+
         var forgotSecInput = new NumberBox { PlaceholderText = "Enter duration in seconds...", Visibility = Visibility.Collapsed };
-        var forgotNormalInput = new Grid { Visibility = Visibility.Visible };
-        forgotNormalInput.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        forgotNormalInput.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var forgotDatePicker = new DatePicker { HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 4, 0) };
+
+        // 同样将 Forgot Time 的时间选择器改为垂直排列
+        var forgotNormalInput = new StackPanel { Spacing = 0, Visibility = Visibility.Visible };
+
+        var forgotDatePicker = new DatePicker { HorizontalAlignment = HorizontalAlignment.Stretch };
         var forgotTimePicker = new TimePicker { HorizontalAlignment = HorizontalAlignment.Stretch, ClockIdentifier = "24HourClock" };
-        Grid.SetColumn(forgotDatePicker, 0);
-        Grid.SetColumn(forgotTimePicker, 1);
+
+        if (forgotDatePicker.ContextFlyout != null) forgotDatePicker.ContextFlyout.ShouldConstrainToRootBounds = false;
+        if (forgotTimePicker.ContextFlyout != null) forgotTimePicker.ContextFlyout.ShouldConstrainToRootBounds = false;
+
         forgotNormalInput.Children.Add(forgotDatePicker);
         forgotNormalInput.Children.Add(forgotTimePicker);
 

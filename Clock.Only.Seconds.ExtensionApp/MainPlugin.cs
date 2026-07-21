@@ -22,7 +22,7 @@ public sealed class MainPlugin : WidgetPluginBase, IConfigurableWidgetPlugin
     public override WidgetCategory Category => WidgetCategory.Utility;
 
     public override int PreviewLogicalWidth => 150;
-    public override int FlyoutWidth => 360;
+    public override int FlyoutWidth => 520;
     public override int FlyoutHeight => 680;
     public override WidgetFlyoutBackdrop FlyoutBackdrop => WidgetFlyoutBackdrop.Acrylic;
 
